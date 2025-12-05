@@ -1,8 +1,9 @@
 @page "/postprocess"
+@using Microsoft.AspNetCore.Components.Web
 @inject FFmpegService FFmpegService
 @inject PresetService PresetService
 @inject ConfigService ConfigService
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <h1 class="mb-4">
     <i class="bi bi-film me-2"></i>Post-Process
@@ -353,7 +354,7 @@ else
         return FFmpegService.GenerateCommandPreview(input, output, _options);
     }
 
-    private async Task CopyCommand()
+    private void CopyCommand()
     {
         // Would need JS interop for clipboard, skip for now
     }

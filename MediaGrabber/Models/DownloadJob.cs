@@ -49,7 +49,7 @@ public class DownloadJob
         }
     }
 
-    public void AddLog(string message, LogLevel level = LogLevel.Info)
+    public void AddLog(string message, JobLogLevel level = JobLogLevel.Info)
     {
         Logs.Add(new LogEntry
         {
@@ -75,12 +75,12 @@ public class LogEntry
 {
     public DateTime Timestamp { get; set; }
     public string Message { get; set; } = "";
-    public LogLevel Level { get; set; }
+    public JobLogLevel Level { get; set; }
 
     public string TimestampString => Timestamp.ToString("HH:mm:ss");
 }
 
-public enum LogLevel
+public enum JobLogLevel
 {
     Debug,
     Info,

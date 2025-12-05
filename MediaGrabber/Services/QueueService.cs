@@ -109,7 +109,7 @@ public class QueueService : BackgroundService
             if (job.Status == JobStatus.Pending)
             {
                 job.Status = JobStatus.Cancelled;
-                job.AddLog("Job cancelled by user", LogLevel.Warning);
+                job.AddLog("Job cancelled by user", JobLogLevel.Warning);
             }
             OnJobUpdated?.Invoke(job);
             OnJobsChanged?.Invoke();
@@ -236,7 +236,7 @@ public class QueueService : BackgroundService
                         job.CurrentOperation = $"Processing: {progress:F1}%";
                         OnJobUpdated?.Invoke(job);
                     },
-                    onLog: line => job.AddLog(line, LogLevel.Debug),
+                    onLog: line => job.AddLog(line, JobLogLevel.Debug),
                     cancellationToken: cancellationToken);
 
                 // Replace original with processed
@@ -266,7 +266,7 @@ public class QueueService : BackgroundService
         {
             job.Status = JobStatus.Cancelled;
             job.CurrentOperation = "Cancelled";
-            job.AddLog("Job cancelled", LogLevel.Warning);
+            job.AddLog("Job cancelled", JobLogLevel.Warning);
         }
         catch (Exception ex)
         {
@@ -274,7 +274,7 @@ public class QueueService : BackgroundService
             job.Status = JobStatus.Failed;
             job.ErrorMessage = ex.Message;
             job.CurrentOperation = "Failed";
-            job.AddLog($"Error: {ex.Message}", LogLevel.Error);
+            job.AddLog($"Error: {ex.Message}", JobLogLevel.Error);
         }
         finally
         {

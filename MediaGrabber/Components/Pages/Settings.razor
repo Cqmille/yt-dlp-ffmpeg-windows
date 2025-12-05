@@ -1,9 +1,10 @@
 @page "/settings"
+@using Microsoft.AspNetCore.Components.Web
 @inject ConfigService ConfigService
 @inject UpdateService UpdateService
 @inject YtDlpService YtDlpService
 @inject FFmpegService FFmpegService
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @implements IDisposable
 
 <h1 class="mb-4">

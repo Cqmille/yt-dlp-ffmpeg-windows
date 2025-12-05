@@ -1,8 +1,9 @@
 @page "/download"
+@using Microsoft.AspNetCore.Components.Web
 @inject YtDlpService YtDlpService
 @inject QueueService QueueService
 @inject ConfigService ConfigService
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <h1 class="mb-4">
     <i class="bi bi-cloud-download me-2"></i>Download
@@ -103,25 +104,25 @@ else
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-md-3">
-                        <button class="btn btn-outline-primary w-100 h-100 py-3" @onclick="() => SetFormat(\"bestvideo+bestaudio/best\")">
+                        <button class="btn btn-outline-primary w-100 h-100 py-3" @onclick="SetBestQuality">
                             <i class="bi bi-star d-block fs-3 mb-2"></i>
                             Best Quality
                         </button>
                     </div>
                     <div class="col-md-3">
-                        <button class="btn btn-outline-success w-100 h-100 py-3" @onclick="() => SetAudioOnly(\"mp3\")">
+                        <button class="btn btn-outline-success w-100 h-100 py-3" @onclick="SetAudioOnlyMp3">
                             <i class="bi bi-music-note d-block fs-3 mb-2"></i>
                             Audio Only (MP3)
                         </button>
                     </div>
                     <div class="col-md-3">
-                        <button class="btn btn-outline-info w-100 h-100 py-3" @onclick="() => SetFormat(\"bestvideo[height<=1080]+bestaudio/best[height<=1080]\")">
+                        <button class="btn btn-outline-info w-100 h-100 py-3" @onclick="Set1080p">
                             <i class="bi bi-display d-block fs-3 mb-2"></i>
                             1080p Max
                         </button>
                     </div>
                     <div class="col-md-3">
-                        <button class="btn btn-outline-secondary w-100 h-100 py-3" @onclick="() => SetFormat(\"bestvideo[height<=720]+bestaudio/best[height<=720]\")">
+                        <button class="btn btn-outline-secondary w-100 h-100 py-3" @onclick="Set720p">
                             <i class="bi bi-laptop d-block fs-3 mb-2"></i>
                             720p Max
                         </button>
@@ -138,13 +139,13 @@ else
                 </h5>
                 <div>
                     <div class="btn-group btn-group-sm">
-                        <button class="btn @(_showVideo ? "btn-primary" : "btn-outline-primary")" @onclick="() => _showVideo = !_showVideo">
+                        <button class="btn @(_showVideo ? "btn-primary" : "btn-outline-primary")" @onclick="ToggleShowVideo">
                             <i class="bi bi-camera-video me-1"></i>Video
                         </button>
-                        <button class="btn @(_showAudio ? "btn-primary" : "btn-outline-primary")" @onclick="() => _showAudio = !_showAudio">
+                        <button class="btn @(_showAudio ? "btn-primary" : "btn-outline-primary")" @onclick="ToggleShowAudio">
                             <i class="bi bi-volume-up me-1"></i>Audio
                         </button>
-                        <button class="btn @(_showCombined ? "btn-primary" : "btn-outline-primary")" @onclick="() => _showCombined = !_showCombined">
+                        <button class="btn @(_showCombined ? "btn-primary" : "btn-outline-primary")" @onclick="ToggleShowCombined">
                             <i class="bi bi-film me-1"></i>Combined
                         </button>
                     </div>
@@ -279,7 +280,7 @@ else
 
     private IEnumerable<FormatInfo> GetFilteredFormats()
     {
-        if (_metadata?.Formats == null) return [];
+        if (_metadata?.Formats == null) return Enumerable.Empty<FormatInfo>();
 
         return _metadata.Formats
             .Where(f => !string.IsNullOrEmpty(f.FormatId))
@@ -301,7 +302,6 @@ else
         }
         else if (format.IsVideoOnly)
         {
-            // Combine with best audio
             _formatSelector = $"{format.FormatId}+bestaudio";
         }
         else
@@ -310,20 +310,38 @@ else
         }
     }
 
-    private void SetFormat(string format)
+    private void SetBestQuality()
     {
-        _formatSelector = format;
+        _formatSelector = "bestvideo+bestaudio/best";
         _selectedFormatId = null;
         _extractAudio = false;
     }
 
-    private void SetAudioOnly(string audioFormat)
+    private void SetAudioOnlyMp3()
     {
         _formatSelector = "bestaudio";
         _selectedFormatId = null;
         _extractAudio = true;
-        _audioFormat = audioFormat;
+        _audioFormat = "mp3";
     }
+
+    private void Set1080p()
+    {
+        _formatSelector = "bestvideo[height<=1080]+bestaudio/best[height<=1080]";
+        _selectedFormatId = null;
+        _extractAudio = false;
+    }
+
+    private void Set720p()
+    {
+        _formatSelector = "bestvideo[height<=720]+bestaudio/best[height<=720]";
+        _selectedFormatId = null;
+        _extractAudio = false;
+    }
+
+    private void ToggleShowVideo() => _showVideo = !_showVideo;
+    private void ToggleShowAudio() => _showAudio = !_showAudio;
+    private void ToggleShowCombined() => _showCombined = !_showCombined;
 
     private string GetTypeBadgeClass(FormatInfo format)
     {
@@ -344,7 +362,6 @@ else
             _extractAudio,
             _audioFormat);
 
-        // Reset for next download
         _url = "";
         _metadata = null;
         _selectedFormatId = null;

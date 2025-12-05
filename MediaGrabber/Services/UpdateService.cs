@@ -73,7 +73,7 @@ public class UpdateService : IDisposable
         }
     }
 
-    private async Task CheckFfmpegUpdateAsync(CancellationToken cancellationToken)
+    private Task CheckFfmpegUpdateAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -88,6 +88,7 @@ public class UpdateService : IDisposable
         {
             _logger.LogWarning(ex, "Failed to check ffmpeg updates");
         }
+        return Task.CompletedTask;
     }
 
     public async Task DownloadYtDlpAsync(CancellationToken cancellationToken = default)

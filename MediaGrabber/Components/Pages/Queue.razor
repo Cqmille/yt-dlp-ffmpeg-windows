@@ -1,7 +1,8 @@
 @page "/queue"
+@using Microsoft.AspNetCore.Components.Web
 @inject QueueService QueueService
 @inject ConfigService ConfigService
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @implements IDisposable
 
 <h1 class="mb-4">
@@ -265,12 +266,12 @@ else
         _ => "bg-secondary"
     };
 
-    private string GetLogClass(LogLevel level) => level switch
+    private string GetLogClass(JobLogLevel level) => level switch
     {
-        LogLevel.Error => "text-danger",
-        LogLevel.Warning => "text-warning",
-        LogLevel.Info => "text-light",
-        LogLevel.Debug => "text-muted",
+        JobLogLevel.Error => "text-danger",
+        JobLogLevel.Warning => "text-warning",
+        JobLogLevel.Info => "text-light",
+        JobLogLevel.Debug => "text-muted",
         _ => "text-light"
     };
 

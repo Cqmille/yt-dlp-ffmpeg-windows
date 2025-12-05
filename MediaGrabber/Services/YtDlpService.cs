@@ -136,13 +136,13 @@ public partial class YtDlpService
                     outputFile = mergerMatch.Groups[1].Value;
                 }
 
-                job.AddLog(line, LogLevel.Debug);
+                job.AddLog(line, JobLogLevel.Debug);
             },
             onError: line =>
             {
                 if (!string.IsNullOrWhiteSpace(line))
                 {
-                    job.AddLog(line, LogLevel.Warning);
+                    job.AddLog(line, JobLogLevel.Warning);
                 }
             },
             cancellationToken: cancellationToken
