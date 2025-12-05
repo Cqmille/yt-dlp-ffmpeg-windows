@@ -1,0 +1,289 @@
+@page "/queue"
+@inject QueueService QueueService
+@inject ConfigService ConfigService
+@rendermode InteractiveServer
+@implements IDisposable
+
+<h1 class="mb-4">
+    <i class="bi bi-list-task me-2"></i>Download Queue
+</h1>
+
+<!-- Stats Bar -->
+<div class="row g-3 mb-4">
+    <div class="col-auto">
+        <span class="badge bg-primary fs-6">
+            <i class="bi bi-cloud-download me-1"></i>Active: @QueueService.ActiveCount
+        </span>
+    </div>
+    <div class="col-auto">
+        <span class="badge bg-secondary fs-6">
+            <i class="bi bi-hourglass me-1"></i>Pending: @QueueService.PendingCount
+        </span>
+    </div>
+    <div class="col-auto">
+        <span class="badge bg-success fs-6">
+            <i class="bi bi-check-circle me-1"></i>Completed: @QueueService.CompletedCount
+        </span>
+    </div>
+    <div class="col-auto">
+        <span class="badge bg-danger fs-6">
+            <i class="bi bi-x-circle me-1"></i>Failed: @QueueService.FailedCount
+        </span>
+    </div>
+    <div class="col-auto ms-auto">
+        <button class="btn btn-outline-secondary btn-sm" @onclick="() => QueueService.ClearCompleted()"
+                disabled="@(!QueueService.CompletedJobs.Any() && !QueueService.FailedJobs.Any())">
+            <i class="bi bi-trash me-1"></i>Clear Completed
+        </button>
+    </div>
+</div>
+
+@if (!QueueService.AllJobs.Any())
+{
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-inbox fs-1 text-muted mb-3 d-block"></i>
+            <h5 class="text-muted">No downloads in queue</h5>
+            <p class="text-muted mb-0">Go to the <a href="download">Download</a> page to add new downloads.</p>
+        </div>
+    </div>
+}
+else
+{
+    <div class="accordion" id="jobsAccordion">
+        @foreach (var job in QueueService.AllJobs)
+        {
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button @(IsExpanded(job.Id) ? "" : "collapsed")"
+                            type="button" @onclick="() => ToggleExpand(job.Id)">
+                        <div class="d-flex align-items-center w-100 pe-3">
+                            <!-- Thumbnail -->
+                            @if (!string.IsNullOrEmpty(job.Thumbnail))
+                            {
+                                <img src="@job.Thumbnail" alt="" class="rounded me-3"
+                                     style="width: 60px; height: 34px; object-fit: cover;" />
+                            }
+                            else
+                            {
+                                <div class="bg-secondary rounded me-3 d-flex align-items-center justify-content-center"
+                                     style="width: 60px; height: 34px;">
+                                    <i class="bi bi-film"></i>
+                                </div>
+                            }
+
+                            <!-- Info -->
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center">
+                                    <strong class="me-2">@job.Title</strong>
+                                    <span class="badge @GetStatusBadgeClass(job.Status) me-2">@job.Status</span>
+                                    @if (!string.IsNullOrEmpty(job.Platform))
+                                    {
+                                        <span class="badge bg-secondary">@job.Platform</span>
+                                    }
+                                </div>
+
+                                @if (job.Status == JobStatus.Downloading || job.Status == JobStatus.Processing)
+                                {
+                                    <div class="mt-1">
+                                        <div class="progress" style="height: 4px; width: 300px;">
+                                            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                                 style="width: @job.Progress%"></div>
+                                        </div>
+                                        <small class="text-muted">
+                                            @job.Progress.ToString("F1")%
+                                            @if (!string.IsNullOrEmpty(job.Speed))
+                                            {
+                                                <span class="ms-2">@job.Speed</span>
+                                            }
+                                            @if (!string.IsNullOrEmpty(job.Eta))
+                                            {
+                                                <span class="ms-2">ETA: @job.Eta</span>
+                                            }
+                                        </small>
+                                    </div>
+                                }
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="btn-group btn-group-sm me-2" @onclick:stopPropagation="true">
+                                @if (job.CanCancel)
+                                {
+                                    <button class="btn btn-outline-danger" @onclick="() => QueueService.CancelJob(job.Id)"
+                                            title="Cancel">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                }
+                                @if (job.CanRetry)
+                                {
+                                    <button class="btn btn-outline-warning" @onclick="() => QueueService.RetryJob(job.Id)"
+                                            title="Retry">
+                                        <i class="bi bi-arrow-clockwise"></i>
+                                    </button>
+                                }
+                                @if (job.Status == JobStatus.Completed && !string.IsNullOrEmpty(job.OutputPath))
+                                {
+                                    <button class="btn btn-outline-success" @onclick="() => OpenFolder(job.OutputPath)"
+                                            title="Open folder">
+                                        <i class="bi bi-folder2-open"></i>
+                                    </button>
+                                }
+                                <button class="btn btn-outline-secondary" @onclick="() => QueueService.RemoveJob(job.Id)"
+                                        title="Remove">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </button>
+                </h2>
+                <div class="accordion-collapse collapse @(IsExpanded(job.Id) ? "show" : "")">
+                    <div class="accordion-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Details</h6>
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                            <td class="text-muted">URL</td>
+                                            <td><a href="@job.Url" target="_blank" class="text-break">@job.Url</a></td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted">Format</td>
+                                            <td><code>@job.FormatSelector</code></td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted">Output Directory</td>
+                                            <td><code>@job.OutputDirectory</code></td>
+                                        </tr>
+                                        @if (!string.IsNullOrEmpty(job.OutputPath))
+                                        {
+                                            <tr>
+                                                <td class="text-muted">Output File</td>
+                                                <td><code>@job.OutputPath</code></td>
+                                            </tr>
+                                        }
+                                        <tr>
+                                            <td class="text-muted">Created</td>
+                                            <td>@job.CreatedAt.ToString("g")</td>
+                                        </tr>
+                                        @if (job.StartedAt.HasValue)
+                                        {
+                                            <tr>
+                                                <td class="text-muted">Started</td>
+                                                <td>@job.StartedAt.Value.ToString("g")</td>
+                                            </tr>
+                                        }
+                                        @if (job.CompletedAt.HasValue)
+                                        {
+                                            <tr>
+                                                <td class="text-muted">Completed</td>
+                                                <td>@job.CompletedAt.Value.ToString("g")</td>
+                                            </tr>
+                                        }
+                                        @if (job.ElapsedTime.HasValue)
+                                        {
+                                            <tr>
+                                                <td class="text-muted">Duration</td>
+                                                <td>@job.ElapsedTime.Value.ToString(@"hh\:mm\:ss")</td>
+                                            </tr>
+                                        }
+                                        @if (!string.IsNullOrEmpty(job.ErrorMessage))
+                                        {
+                                            <tr>
+                                                <td class="text-muted">Error</td>
+                                                <td class="text-danger">@job.ErrorMessage</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Logs</h6>
+                                <div class="bg-dark rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                                    @if (job.Logs.Any())
+                                    {
+                                        @foreach (var log in job.Logs.TakeLast(50))
+                                        {
+                                            <div class="@GetLogClass(log.Level)">
+                                                <small class="text-muted">[@log.TimestampString]</small>
+                                                <span>@log.Message</span>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <div class="text-muted">No logs yet</div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private HashSet<string> _expandedJobs = new();
+
+    protected override void OnInitialized()
+    {
+        QueueService.OnJobsChanged += StateChanged;
+        QueueService.OnJobUpdated += _ => StateChanged();
+    }
+
+    private void StateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        QueueService.OnJobsChanged -= StateChanged;
+    }
+
+    private bool IsExpanded(string jobId) => _expandedJobs.Contains(jobId);
+
+    private void ToggleExpand(string jobId)
+    {
+        if (_expandedJobs.Contains(jobId))
+            _expandedJobs.Remove(jobId);
+        else
+            _expandedJobs.Add(jobId);
+    }
+
+    private string GetStatusBadgeClass(JobStatus status) => status switch
+    {
+        JobStatus.Pending => "bg-secondary",
+        JobStatus.Downloading => "bg-primary",
+        JobStatus.Processing => "bg-info",
+        JobStatus.Completed => "bg-success",
+        JobStatus.Failed => "bg-danger",
+        JobStatus.Cancelled => "bg-warning",
+        JobStatus.Paused => "bg-secondary",
+        _ => "bg-secondary"
+    };
+
+    private string GetLogClass(LogLevel level) => level switch
+    {
+        LogLevel.Error => "text-danger",
+        LogLevel.Warning => "text-warning",
+        LogLevel.Info => "text-light",
+        LogLevel.Debug => "text-muted",
+        _ => "text-light"
+    };
+
+    private void OpenFolder(string filePath)
+    {
+        try
+        {
+            var folder = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(folder) && Directory.Exists(folder))
+            {
+                System.Diagnostics.Process.Start("explorer.exe", folder);
+            }
+        }
+        catch { }
+    }
+}

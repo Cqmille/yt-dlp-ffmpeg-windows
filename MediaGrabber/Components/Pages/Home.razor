@@ -1,0 +1,260 @@
+@page "/"
+@inject QueueService QueueService
+@inject ConfigService ConfigService
+@inject YtDlpService YtDlpService
+@inject FFmpegService FFmpegService
+@inject UpdateService UpdateService
+@rendermode InteractiveServer
+
+<h1 class="mb-4">
+    <i class="bi bi-house me-2"></i>Dashboard
+</h1>
+
+<!-- Status Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2 opacity-75">Active Downloads</h6>
+                        <h2 class="card-title mb-0">@QueueService.ActiveCount</h2>
+                    </div>
+                    <i class="bi bi-cloud-download fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-secondary text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2 opacity-75">Pending</h6>
+                        <h2 class="card-title mb-0">@QueueService.PendingCount</h2>
+                    </div>
+                    <i class="bi bi-hourglass-split fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2 opacity-75">Completed</h6>
+                        <h2 class="card-title mb-0">@QueueService.CompletedCount</h2>
+                    </div>
+                    <i class="bi bi-check-circle fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-danger text-white h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2 opacity-75">Failed</h6>
+                        <h2 class="card-title mb-0">@QueueService.FailedCount</h2>
+                    </div>
+                    <i class="bi bi-x-circle fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Download -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="bi bi-lightning me-2"></i>Quick Download
+        </h5>
+    </div>
+    <div class="card-body">
+        <form @onsubmit="QuickDownload" @onsubmit:preventDefault>
+            <div class="input-group input-group-lg">
+                <span class="input-group-text">
+                    <i class="bi bi-link-45deg"></i>
+                </span>
+                <input type="text" class="form-control" placeholder="Paste video URL here..."
+                       @bind="_quickUrl" @bind:event="oninput" disabled="@(!ConfigService.IsYtDlpInstalled())" />
+                <button class="btn btn-primary" type="submit" disabled="@(string.IsNullOrWhiteSpace(_quickUrl) || !ConfigService.IsYtDlpInstalled())">
+                    <i class="bi bi-download me-2"></i>Download Best Quality
+                </button>
+            </div>
+        </form>
+        @if (!ConfigService.IsYtDlpInstalled())
+        {
+            <div class="alert alert-warning mt-3 mb-0">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                yt-dlp is not installed. Go to <a href="settings">Settings</a> to download it.
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Active Jobs -->
+@if (QueueService.ActiveJobs.Any())
+{
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-activity me-2"></i>Active Downloads
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="list-group list-group-flush">
+                @foreach (var job in QueueService.ActiveJobs)
+                {
+                    <div class="list-group-item">
+                        <div class="d-flex align-items-center">
+                            @if (!string.IsNullOrEmpty(job.Thumbnail))
+                            {
+                                <img src="@job.Thumbnail" alt="" class="rounded me-3" style="width: 80px; height: 45px; object-fit: cover;" />
+                            }
+                            else
+                            {
+                                <div class="bg-secondary rounded me-3 d-flex align-items-center justify-content-center" style="width: 80px; height: 45px;">
+                                    <i class="bi bi-film"></i>
+                                </div>
+                            }
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">@job.Title</h6>
+                                <div class="progress" style="height: 6px;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                         style="width: @job.Progress%"></div>
+                                </div>
+                                <small class="text-muted">
+                                    @job.CurrentOperation
+                                    @if (!string.IsNullOrEmpty(job.Speed))
+                                    {
+                                        <span class="ms-2">@job.Speed</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(job.Eta))
+                                    {
+                                        <span class="ms-2">ETA: @job.Eta</span>
+                                    }
+                                </small>
+                            </div>
+                            <button class="btn btn-outline-danger btn-sm ms-3" @onclick="() => QueueService.CancelJob(job.Id)">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<!-- System Info -->
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-info-circle me-2"></i>System Info
+                </h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr>
+                            <td class="text-muted">yt-dlp</td>
+                            <td>
+                                @if (ConfigService.IsYtDlpInstalled())
+                                {
+                                    <span class="badge bg-success">@_ytDlpVersion</span>
+                                    @if (UpdateService.YtDlpUpdateAvailable)
+                                    {
+                                        <span class="badge bg-warning ms-1">Update available</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">Not installed</span>
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">FFmpeg</td>
+                            <td>
+                                @if (ConfigService.IsFfmpegInstalled())
+                                {
+                                    <span class="badge bg-success">@_ffmpegVersion</span>
+                                    @if (UpdateService.FfmpegUpdateAvailable)
+                                    {
+                                        <span class="badge bg-warning ms-1">Update available</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">Not installed</span>
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Output Directory</td>
+                            <td><code>@ConfigService.Config.OutputDirectory</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-globe me-2"></i>Supported Platforms
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2">
+                    <span class="badge bg-danger"><i class="bi bi-youtube me-1"></i>YouTube</span>
+                    <span class="badge bg-purple" style="background-color: #6441a5;"><i class="bi bi-twitch me-1"></i>Twitch</span>
+                    <span class="badge bg-dark"><i class="bi bi-twitter-x me-1"></i>Twitter/X</span>
+                    <span class="badge bg-dark"><i class="bi bi-tiktok me-1"></i>TikTok</span>
+                    <span class="badge bg-gradient" style="background: linear-gradient(45deg, #405DE6, #E1306C);"><i class="bi bi-instagram me-1"></i>Instagram</span>
+                    <span class="badge bg-primary"><i class="bi bi-facebook me-1"></i>Facebook</span>
+                    <span class="badge bg-info"><i class="bi bi-vimeo me-1"></i>Vimeo</span>
+                    <span class="badge bg-secondary"><i class="bi bi-reddit me-1"></i>Reddit</span>
+                    <span class="badge bg-secondary">+1000 more</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _quickUrl = "";
+    private string _ytDlpVersion = "Loading...";
+    private string _ffmpegVersion = "Loading...";
+
+    protected override async Task OnInitializedAsync()
+    {
+        QueueService.OnJobsChanged += () => InvokeAsync(StateHasChanged);
+        QueueService.OnJobUpdated += _ => InvokeAsync(StateHasChanged);
+
+        // Load versions
+        if (ConfigService.IsYtDlpInstalled())
+        {
+            _ytDlpVersion = await YtDlpService.GetVersionAsync();
+        }
+        if (ConfigService.IsFfmpegInstalled())
+        {
+            _ffmpegVersion = await FFmpegService.GetVersionAsync();
+        }
+    }
+
+    private void QuickDownload()
+    {
+        if (string.IsNullOrWhiteSpace(_quickUrl)) return;
+
+        QueueService.EnqueueFromUrl(_quickUrl);
+        _quickUrl = "";
+    }
+}

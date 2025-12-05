@@ -1,0 +1,353 @@
+@page "/download"
+@inject YtDlpService YtDlpService
+@inject QueueService QueueService
+@inject ConfigService ConfigService
+@rendermode InteractiveServer
+
+<h1 class="mb-4">
+    <i class="bi bi-cloud-download me-2"></i>Download
+</h1>
+
+@if (!ConfigService.IsYtDlpInstalled())
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        yt-dlp is not installed. Go to <a href="settings">Settings</a> to download it.
+    </div>
+}
+else
+{
+    <!-- URL Input -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form @onsubmit="FetchMetadata" @onsubmit:preventDefault>
+                <div class="input-group input-group-lg">
+                    <span class="input-group-text">
+                        <i class="bi bi-link-45deg"></i>
+                    </span>
+                    <input type="text" class="form-control" placeholder="Enter video URL..."
+                           @bind="_url" @bind:event="oninput" disabled="@_isLoading" />
+                    <button class="btn btn-primary" type="submit" disabled="@(string.IsNullOrWhiteSpace(_url) || _isLoading)">
+                        @if (_isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <span>Loading...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-search me-2"></i>
+                            <span>Fetch Info</span>
+                        }
+                    </button>
+                </div>
+            </form>
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <div class="alert alert-danger mt-3 mb-0">
+                    <i class="bi bi-x-circle me-2"></i>@_error
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (_metadata != null)
+    {
+        <!-- Video Info -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        @if (!string.IsNullOrEmpty(_metadata.Thumbnail))
+                        {
+                            <img src="@_metadata.Thumbnail" alt="@_metadata.Title" class="img-fluid rounded" />
+                        }
+                        else
+                        {
+                            <div class="bg-secondary rounded d-flex align-items-center justify-content-center" style="height: 200px;">
+                                <i class="bi bi-film fs-1"></i>
+                            </div>
+                        }
+                    </div>
+                    <div class="col-md-8">
+                        <h4>@_metadata.Title</h4>
+                        <div class="text-muted mb-3">
+                            <span class="badge bg-primary me-2">@_metadata.PlatformName</span>
+                            @if (!string.IsNullOrEmpty(_metadata.Uploader))
+                            {
+                                <span class="me-3"><i class="bi bi-person me-1"></i>@_metadata.Uploader</span>
+                            }
+                            <span class="me-3"><i class="bi bi-clock me-1"></i>@_metadata.FormattedDuration</span>
+                            @if (_metadata.ViewCount.HasValue)
+                            {
+                                <span><i class="bi bi-eye me-1"></i>@_metadata.FormattedViewCount views</span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(_metadata.Description))
+                        {
+                            <p class="text-muted small" style="max-height: 100px; overflow: hidden;">
+                                @(_metadata.Description.Length > 300 ? _metadata.Description[..300] + "..." : _metadata.Description)
+                            </p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Options -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-lightning me-2"></i>Quick Options
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <button class="btn btn-outline-primary w-100 h-100 py-3" @onclick="() => SetFormat(\"bestvideo+bestaudio/best\")">
+                            <i class="bi bi-star d-block fs-3 mb-2"></i>
+                            Best Quality
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-outline-success w-100 h-100 py-3" @onclick="() => SetAudioOnly(\"mp3\")">
+                            <i class="bi bi-music-note d-block fs-3 mb-2"></i>
+                            Audio Only (MP3)
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-outline-info w-100 h-100 py-3" @onclick="() => SetFormat(\"bestvideo[height<=1080]+bestaudio/best[height<=1080]\")">
+                            <i class="bi bi-display d-block fs-3 mb-2"></i>
+                            1080p Max
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-outline-secondary w-100 h-100 py-3" @onclick="() => SetFormat(\"bestvideo[height<=720]+bestaudio/best[height<=720]\")">
+                            <i class="bi bi-laptop d-block fs-3 mb-2"></i>
+                            720p Max
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Format Selection -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-collection me-2"></i>Available Formats
+                </h5>
+                <div>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn @(_showVideo ? "btn-primary" : "btn-outline-primary")" @onclick="() => _showVideo = !_showVideo">
+                            <i class="bi bi-camera-video me-1"></i>Video
+                        </button>
+                        <button class="btn @(_showAudio ? "btn-primary" : "btn-outline-primary")" @onclick="() => _showAudio = !_showAudio">
+                            <i class="bi bi-volume-up me-1"></i>Audio
+                        </button>
+                        <button class="btn @(_showCombined ? "btn-primary" : "btn-outline-primary")" @onclick="() => _showCombined = !_showCombined">
+                            <i class="bi bi-film me-1"></i>Combined
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;"></th>
+                                <th>ID</th>
+                                <th>Ext</th>
+                                <th>Resolution</th>
+                                <th>FPS</th>
+                                <th>Video Codec</th>
+                                <th>Audio Codec</th>
+                                <th>Size</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var format in GetFilteredFormats())
+                            {
+                                <tr class="@(_selectedFormatId == format.FormatId ? "table-primary" : "")"
+                                    @onclick="() => SelectFormat(format)" style="cursor: pointer;">
+                                    <td>
+                                        <input type="radio" class="form-check-input" checked="@(_selectedFormatId == format.FormatId)" />
+                                    </td>
+                                    <td><code>@format.FormatId</code></td>
+                                    <td>@format.Extension</td>
+                                    <td>@format.DisplayResolution</td>
+                                    <td>@format.DisplayFps</td>
+                                    <td>@format.DisplayVideoCodec</td>
+                                    <td>@format.DisplayAudioCodec</td>
+                                    <td>@format.DisplayFileSize</td>
+                                    <td>
+                                        <span class="badge @GetTypeBadgeClass(format)">@format.FormatType</span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Download Options -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-sliders me-2"></i>Options
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Format Selector</label>
+                        <input type="text" class="form-control font-monospace" @bind="_formatSelector" />
+                        <small class="text-muted">Custom format selector (advanced)</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Options</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" @bind="_embedSubtitles" id="embedSubs" />
+                            <label class="form-check-label" for="embedSubs">Embed subtitles</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" @bind="_embedMetadata" id="embedMeta" />
+                            <label class="form-check-label" for="embedMeta">Embed metadata</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Download Button -->
+        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+            <button class="btn btn-lg btn-primary" @onclick="StartDownload" disabled="@string.IsNullOrEmpty(_formatSelector)">
+                <i class="bi bi-download me-2"></i>Add to Queue
+            </button>
+        </div>
+    }
+}
+
+@code {
+    private string _url = "";
+    private bool _isLoading;
+    private string? _error;
+    private VideoMetadata? _metadata;
+
+    private string _formatSelector = "bestvideo+bestaudio/best";
+    private string? _selectedFormatId;
+    private bool _embedSubtitles = true;
+    private bool _embedMetadata = true;
+    private bool _extractAudio;
+    private string? _audioFormat;
+
+    private bool _showVideo = true;
+    private bool _showAudio = true;
+    private bool _showCombined = true;
+
+    protected override void OnInitialized()
+    {
+        _embedSubtitles = ConfigService.Config.EmbedSubtitles;
+        _embedMetadata = ConfigService.Config.EmbedMetadata;
+        _formatSelector = ConfigService.Config.DefaultVideoFormat;
+    }
+
+    private async Task FetchMetadata()
+    {
+        if (string.IsNullOrWhiteSpace(_url)) return;
+
+        _isLoading = true;
+        _error = null;
+        _metadata = null;
+
+        try
+        {
+            _metadata = await YtDlpService.GetMetadataAsync(_url);
+            _formatSelector = ConfigService.Config.DefaultVideoFormat;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private IEnumerable<FormatInfo> GetFilteredFormats()
+    {
+        if (_metadata?.Formats == null) return [];
+
+        return _metadata.Formats
+            .Where(f => !string.IsNullOrEmpty(f.FormatId))
+            .Where(f =>
+                (_showVideo && f.IsVideoOnly) ||
+                (_showAudio && f.IsAudioOnly) ||
+                (_showCombined && f.HasVideo && f.HasAudio))
+            .OrderByDescending(f => f.Height ?? 0)
+            .ThenByDescending(f => f.TotalBitrate ?? 0);
+    }
+
+    private void SelectFormat(FormatInfo format)
+    {
+        _selectedFormatId = format.FormatId;
+
+        if (format.IsAudioOnly)
+        {
+            _formatSelector = format.FormatId;
+        }
+        else if (format.IsVideoOnly)
+        {
+            // Combine with best audio
+            _formatSelector = $"{format.FormatId}+bestaudio";
+        }
+        else
+        {
+            _formatSelector = format.FormatId;
+        }
+    }
+
+    private void SetFormat(string format)
+    {
+        _formatSelector = format;
+        _selectedFormatId = null;
+        _extractAudio = false;
+    }
+
+    private void SetAudioOnly(string audioFormat)
+    {
+        _formatSelector = "bestaudio";
+        _selectedFormatId = null;
+        _extractAudio = true;
+        _audioFormat = audioFormat;
+    }
+
+    private string GetTypeBadgeClass(FormatInfo format)
+    {
+        if (format.IsVideoOnly) return "bg-info";
+        if (format.IsAudioOnly) return "bg-success";
+        return "bg-primary";
+    }
+
+    private void StartDownload()
+    {
+        if (_metadata == null) return;
+
+        QueueService.EnqueueDownload(
+            _metadata,
+            _formatSelector,
+            _embedSubtitles,
+            _embedMetadata,
+            _extractAudio,
+            _audioFormat);
+
+        // Reset for next download
+        _url = "";
+        _metadata = null;
+        _selectedFormatId = null;
+        _formatSelector = ConfigService.Config.DefaultVideoFormat;
+    }
+}

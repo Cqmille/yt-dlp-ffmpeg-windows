@@ -1,0 +1,405 @@
+@page "/postprocess"
+@inject FFmpegService FFmpegService
+@inject PresetService PresetService
+@inject ConfigService ConfigService
+@rendermode InteractiveServer
+
+<h1 class="mb-4">
+    <i class="bi bi-film me-2"></i>Post-Process
+</h1>
+
+@if (!ConfigService.IsFfmpegInstalled())
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        FFmpeg is not installed. Go to <a href="settings">Settings</a> to download it.
+    </div>
+}
+else
+{
+    <div class="row">
+        <!-- Left: File selection and presets -->
+        <div class="col-lg-5 mb-4">
+            <!-- File Selection -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-file-earmark-play me-2"></i>Input File
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">File Path</label>
+                        <input type="text" class="form-control" @bind="_inputPath" placeholder="C:\path\to\video.mp4" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Output Path</label>
+                        <input type="text" class="form-control" @bind="_outputPath" placeholder="C:\path\to\output.mp4" />
+                        <small class="text-muted">Leave empty to auto-generate</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Creator Presets -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-bookmark-star me-2"></i>Creator Presets
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        @foreach (var preset in PresetService.GetAllPresets())
+                        {
+                            <button type="button"
+                                    class="list-group-item list-group-item-action @(_selectedPreset == preset.Id ? "active" : "")"
+                                    @onclick="() => ApplyPreset(preset)">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi @preset.Icon me-3 fs-4"></i>
+                                    <div>
+                                        <strong>@preset.Name</strong>
+                                        @if (preset.IsCustom)
+                                        {
+                                            <span class="badge bg-secondary ms-1">Custom</span>
+                                        }
+                                        <br />
+                                        <small class="text-muted">@preset.Description</small>
+                                    </div>
+                                </div>
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Manual options -->
+        <div class="col-lg-7">
+            <!-- Video Options -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-camera-video me-2"></i>Video Options
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Codec</label>
+                            <select class="form-select" @bind="_options.VideoCodec">
+                                <option value="">No change</option>
+                                @foreach (var (value, name) in FFmpegCodecs.VideoCodecs)
+                                {
+                                    <option value="@value">@name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Preset</label>
+                            <select class="form-select" @bind="_options.Preset" disabled="@(string.IsNullOrEmpty(_options.VideoCodec) || _options.VideoCodec == "copy")">
+                                <option value="">Default</option>
+                                @foreach (var (value, name) in FFmpegCodecs.Presets)
+                                {
+                                    <option value="@value">@name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Resolution</label>
+                            <select class="form-select" @bind="_options.Resolution">
+                                <option value="">Original</option>
+                                @foreach (var res in FFmpegCodecs.CommonResolutions)
+                                {
+                                    <option value="@res">@res</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">CRF (0-51)</label>
+                            <input type="number" class="form-control" @bind="_options.Crf" min="0" max="51" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">FPS</label>
+                            <input type="number" class="form-control" @bind="_options.Fps" min="1" max="120" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Video Bitrate</label>
+                            <input type="text" class="form-control" @bind="_options.VideoBitrate" placeholder="e.g., 5M, 2500k" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Aspect Ratio</label>
+                            <select class="form-select" @bind="_options.AspectRatio">
+                                <option value="">Original</option>
+                                <option value="16:9">16:9 (Landscape)</option>
+                                <option value="9:16">9:16 (Vertical)</option>
+                                <option value="4:3">4:3 (Standard)</option>
+                                <option value="1:1">1:1 (Square)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Audio Options -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-volume-up me-2"></i>Audio Options
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Codec</label>
+                            <select class="form-select" @bind="_options.AudioCodec">
+                                <option value="">No change</option>
+                                @foreach (var (value, name) in FFmpegCodecs.AudioCodecs)
+                                {
+                                    <option value="@value">@name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Bitrate</label>
+                            <select class="form-select" @bind="_options.AudioBitrate">
+                                <option value="">Default</option>
+                                <option value="64k">64 kbps</option>
+                                <option value="96k">96 kbps</option>
+                                <option value="128k">128 kbps</option>
+                                <option value="192k">192 kbps</option>
+                                <option value="256k">256 kbps</option>
+                                <option value="320k">320 kbps</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Sample Rate</label>
+                            <select class="form-select" @bind="_options.AudioSampleRate">
+                                <option value="">Default</option>
+                                <option value="44100">44100 Hz</option>
+                                <option value="48000">48000 Hz</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Channels</label>
+                            <select class="form-select" @bind="_options.AudioChannels">
+                                <option value="">Default</option>
+                                <option value="1">Mono</option>
+                                <option value="2">Stereo</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" @bind="_options.NormalizeAudio" id="normAudio" />
+                                <label class="form-check-label" for="normAudio">
+                                    Normalize audio (loudnorm)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trimming -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-scissors me-2"></i>Trimming
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Start Time</label>
+                            <input type="text" class="form-control" @bind="_options.StartTime" placeholder="00:00:00 or seconds" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">End Time</label>
+                            <input type="text" class="form-control" @bind="_options.EndTime" placeholder="00:01:30 or seconds" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Duration</label>
+                            <input type="text" class="form-control" @bind="_options.Duration" placeholder="e.g., 60 for 1 min" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Container -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-box me-2"></i>Container
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Output Format</label>
+                            <select class="form-select" @bind="_options.Container">
+                                @foreach (var (value, name) in FFmpegCodecs.Containers)
+                                {
+                                    <option value="@value">@name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Max File Size (MB)</label>
+                            <input type="number" class="form-control" @bind="_options.MaxFileSizeMB" placeholder="No limit" />
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" @bind="_options.TwoPass" id="twoPass" />
+                                <label class="form-check-label" for="twoPass">
+                                    Two-pass encoding (better quality, slower)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Command Preview -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-terminal me-2"></i>Command Preview
+                    </h5>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="CopyCommand">
+                        <i class="bi bi-clipboard me-1"></i>Copy
+                    </button>
+                </div>
+                <div class="card-body">
+                    <pre class="mb-0 p-3 bg-dark rounded"><code>@GetCommandPreview()</code></pre>
+                </div>
+            </div>
+
+            <!-- Process Button -->
+            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                <button class="btn btn-secondary" @onclick="ResetOptions">
+                    <i class="bi bi-arrow-counterclockwise me-2"></i>Reset
+                </button>
+                <button class="btn btn-lg btn-primary" @onclick="StartProcessing" disabled="@(string.IsNullOrEmpty(_inputPath) || _isProcessing)">
+                    @if (_isProcessing)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                        <span>Processing...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-gear me-2"></i>
+                        <span>Start Processing</span>
+                    }
+                </button>
+            </div>
+
+            @if (_isProcessing)
+            {
+                <div class="mt-4">
+                    <div class="progress mb-2" style="height: 25px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: @_progress%">
+                            @_progress.ToString("F1")%
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(_currentLog))
+                    {
+                        <small class="text-muted">@_currentLog</small>
+                    }
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(_resultMessage))
+            {
+                <div class="alert @(_isSuccess ? "alert-success" : "alert-danger") mt-4">
+                    <i class="bi @(_isSuccess ? "bi-check-circle" : "bi-x-circle") me-2"></i>
+                    @_resultMessage
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private string _inputPath = "";
+    private string _outputPath = "";
+    private FFmpegOptions _options = new() { Container = "mp4" };
+    private string? _selectedPreset;
+
+    private bool _isProcessing;
+    private double _progress;
+    private string? _currentLog;
+    private string? _resultMessage;
+    private bool _isSuccess;
+
+    private void ApplyPreset(CreatorPreset preset)
+    {
+        _selectedPreset = preset.Id;
+        _options = preset.Options.Clone();
+        StateHasChanged();
+    }
+
+    private void ResetOptions()
+    {
+        _options = new FFmpegOptions { Container = "mp4" };
+        _selectedPreset = null;
+    }
+
+    private string GetCommandPreview()
+    {
+        var input = string.IsNullOrEmpty(_inputPath) ? "input.mp4" : _inputPath;
+        var output = string.IsNullOrEmpty(_outputPath)
+            ? Path.Combine(Path.GetDirectoryName(input) ?? "", Path.GetFileNameWithoutExtension(input) + "_processed." + (_options.Container ?? "mp4"))
+            : _outputPath;
+
+        return FFmpegService.GenerateCommandPreview(input, output, _options);
+    }
+
+    private async Task CopyCommand()
+    {
+        // Would need JS interop for clipboard, skip for now
+    }
+
+    private async Task StartProcessing()
+    {
+        if (string.IsNullOrEmpty(_inputPath)) return;
+
+        var output = string.IsNullOrEmpty(_outputPath)
+            ? Path.Combine(Path.GetDirectoryName(_inputPath) ?? "", Path.GetFileNameWithoutExtension(_inputPath) + "_processed." + (_options.Container ?? "mp4"))
+            : _outputPath;
+
+        _isProcessing = true;
+        _progress = 0;
+        _resultMessage = null;
+
+        try
+        {
+            await FFmpegService.ProcessAsync(
+                _inputPath,
+                output,
+                _options,
+                onProgress: (progress, _) =>
+                {
+                    _progress = progress;
+                    InvokeAsync(StateHasChanged);
+                },
+                onLog: log =>
+                {
+                    _currentLog = log;
+                    InvokeAsync(StateHasChanged);
+                });
+
+            _isSuccess = true;
+            _resultMessage = $"Processing complete: {output}";
+        }
+        catch (Exception ex)
+        {
+            _isSuccess = false;
+            _resultMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _isProcessing = false;
+            _progress = 0;
+            _currentLog = null;
+        }
+    }
+}

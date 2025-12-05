@@ -1,0 +1,162 @@
+@inherits LayoutComponentBase
+@inject QueueService QueueService
+@inject UpdateService UpdateService
+@inject ConfigService ConfigService
+
+<div class="d-flex">
+    <!-- Sidebar -->
+    <nav class="sidebar bg-dark border-end" style="width: 250px; min-height: 100vh;">
+        <div class="p-3 border-bottom">
+            <h4 class="mb-0">
+                <i class="bi bi-download me-2"></i>MediaGrabber
+            </h4>
+        </div>
+
+        <ul class="nav nav-pills flex-column p-2">
+            <li class="nav-item">
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                    <i class="bi bi-house me-2"></i>Dashboard
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="download">
+                    <i class="bi bi-cloud-download me-2"></i>Download
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="postprocess">
+                    <i class="bi bi-film me-2"></i>Post-Process
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="queue">
+                    <i class="bi bi-list-task me-2"></i>Queue
+                    @if (_activeCount > 0)
+                    {
+                        <span class="badge bg-primary ms-2">@_activeCount</span>
+                    }
+                    @if (_pendingCount > 0)
+                    {
+                        <span class="badge bg-secondary ms-2">@_pendingCount</span>
+                    }
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="settings">
+                    <i class="bi bi-gear me-2"></i>Settings
+                    @if (_updatesAvailable)
+                    {
+                        <span class="badge bg-warning ms-2">
+                            <i class="bi bi-arrow-up-circle"></i>
+                        </span>
+                    }
+                </NavLink>
+            </li>
+        </ul>
+
+        <!-- Status footer -->
+        <div class="mt-auto p-3 border-top position-absolute bottom-0 w-100" style="width: 250px;">
+            <small class="text-muted">
+                @if (!ConfigService.IsYtDlpInstalled())
+                {
+                    <div class="text-warning">
+                        <i class="bi bi-exclamation-triangle me-1"></i>yt-dlp not installed
+                    </div>
+                }
+                @if (!ConfigService.IsFfmpegInstalled())
+                {
+                    <div class="text-warning">
+                        <i class="bi bi-exclamation-triangle me-1"></i>FFmpeg not installed
+                    </div>
+                }
+                @if (ConfigService.IsYtDlpInstalled() && ConfigService.IsFfmpegInstalled())
+                {
+                    <div class="text-success">
+                        <i class="bi bi-check-circle me-1"></i>Ready
+                    </div>
+                }
+            </small>
+        </div>
+    </nav>
+
+    <!-- Main content -->
+    <main class="flex-grow-1 p-4" style="min-height: 100vh; background-color: var(--bs-body-bg);">
+        @Body
+    </main>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    @foreach (var toast in _toasts)
+    {
+        <div class="toast show" role="alert">
+            <div class="toast-header @(toast.IsError ? "bg-danger" : "bg-success") text-white">
+                <i class="bi @(toast.IsError ? "bi-x-circle" : "bi-check-circle") me-2"></i>
+                <strong class="me-auto">@toast.Title</strong>
+                <button type="button" class="btn-close btn-close-white" @onclick="() => RemoveToast(toast)"></button>
+            </div>
+            <div class="toast-body">
+                @toast.Message
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private int _activeCount;
+    private int _pendingCount;
+    private bool _updatesAvailable;
+    private List<ToastMessage> _toasts = new();
+
+    protected override void OnInitialized()
+    {
+        QueueService.OnJobsChanged += UpdateCounts;
+        UpdateService.OnStatusChanged += _ => InvokeAsync(StateHasChanged);
+        UpdateCounts();
+
+        // Check for updates in background
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await UpdateService.CheckForUpdatesAsync();
+                _updatesAvailable = UpdateService.YtDlpUpdateAvailable || UpdateService.FfmpegUpdateAvailable;
+                await InvokeAsync(StateHasChanged);
+            }
+            catch { }
+        });
+    }
+
+    private void UpdateCounts()
+    {
+        _activeCount = QueueService.ActiveCount;
+        _pendingCount = QueueService.PendingCount;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void RemoveToast(ToastMessage toast)
+    {
+        _toasts.Remove(toast);
+    }
+
+    public void ShowToast(string title, string message, bool isError = false)
+    {
+        var toast = new ToastMessage { Title = title, Message = message, IsError = isError };
+        _toasts.Add(toast);
+        StateHasChanged();
+
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(5000);
+            _toasts.Remove(toast);
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private class ToastMessage
+    {
+        public string Title { get; set; } = "";
+        public string Message { get; set; } = "";
+        public bool IsError { get; set; }
+    }
+}

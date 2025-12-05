@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MediaGrabber</RootNamespace>
+    <AssemblyName>MediaGrabber</AssemblyName>
+
+    <!-- Single-file self-contained deployment -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+
+    <!-- Application info -->
+    <Version>1.0.0</Version>
+    <Authors>MediaGrabber</Authors>
+    <Product>MediaGrabber</Product>
+    <Description>Download and process media with yt-dlp and ffmpeg</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Copy Tools folder to output -->
+    <None Include="Tools\**" CopyToOutputDirectory="PreserveNewest" LinkBase="Tools" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>
